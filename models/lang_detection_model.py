@@ -3,11 +3,13 @@
 """
 A model for language detection in speech
 """
-import pdb
 import logging
 
 import tensorflow as tf
 from model import Model
+from util import ConfusionMatrix, Progbar, minibatches
+from data_util import get_chunks
+from defs import LBLS
 
 logger = logging.getLogger("langDec.model")
 logger.setLevel(logging.DEBUG)
@@ -27,7 +29,7 @@ class LangDetectionModel(Model):
         """Preprocess sequence data for the model.
 
         Args:
-            examples: A list of spectrograms and corresponding language input/output sequences.
+            examples: A list of spectrograms/MFCC and corresponding language input/output sequences.
         Returns:
             A new list of vectorized input/output pairs appropriate for the model.
         """
@@ -46,10 +48,23 @@ class LangDetectionModel(Model):
             The F1 score for predicting input as language entities.
         """
         #IMPLEMENTATION OF EVALUATION FUNCTION HERE
+        class_cm = ConfusionMatrix(labels=LBLS)
+
+        correct_preds, total_correct, total_preds = 0., 0., 0.
+        for _, labels, labels_  in self.output(sess, examples_raw, examples):
+            for l, l_ in zip(labels, labels_):
+                token_cm.update(l, l_)
+            actual = set(get_chunks(labels))
+            pred = set(get_chunks(labels_))
+            correct_preds += len(actual.intersection(pred))
+            total_preds += len(pred)
+            total_actual += len(actual)
+
         p = correct_preds / total_preds if correct_preds > 0 else 0
         r = correct_preds / total_correct if correct_preds > 0 else 0
+
         f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
-        return  (p, r, f1)
+        return class_cm, (p, r, f1)
 
 
     def output(self, sess, inputs_raw, inputs=None):
