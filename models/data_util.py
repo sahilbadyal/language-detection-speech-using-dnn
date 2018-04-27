@@ -38,7 +38,8 @@ class ModelHelper(object):
     def vectorize(self, image_data):
             data = np.zeros((len(image_data), 1, 128, 858), dtype=np.float32)
             for i,im in enumerate(image_data):
-                    data[i, 0, :, :] = np.array(im).astype(np.float32)[:self.x_features, :] / 256.0
+                    im_array = np.array(im).astype(np.float32)
+                    data[i, 0, :, :] = im_array[:self.x_features, :] / 256.0
             return data
 
     @classmethod
@@ -88,8 +89,8 @@ def testModelHelper():
 
         pro_data  = helper.load_and_preprocess_data(list1,list2)
 
-        print np.shape(pro_data)
+        assert np.shape(pro_data) == (8, 2)
 
-
-testModelHelper()
+if __name__ == "__main__":
+        testModelHelper()
 
