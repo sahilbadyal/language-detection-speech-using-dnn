@@ -5,12 +5,12 @@ import argparse
 import time
 import json
 import importlib
-utils = importlib.import_module("./models.util")
+from models import util as utils
 
 print "==> parsing input arguments"
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--network', type=str, default="network_batch", help='embeding size (50, 100, 200, 300 only)')
+parser.add_argument('--network', type=str, default="ld_covnet_rnn", help='embeding size (50, 100, 200, 300 only)')
 parser.add_argument('--epochs', type=int, default=500, help='number of epochs to train')
 parser.add_argument('--batch_size', type=int, default=32, help='no commment')
 parser.add_argument('--l2', type=float, default=0, help='L2 regularization')
@@ -20,8 +20,8 @@ parser.add_argument('--dropout', type=float, default=0.0, help='dropout rate (be
 parser.add_argument('--no-batch_norm', dest="batch_norm", action='store_false', help='batch normalization')
 parser.add_argument('--rnn_num_units', type=int, default=500, help='number of hidden units if the network is RNN')
 parser.add_argument('--png_folder', type=str, default="./data/train/png/", help='The folder where spectrograms are placed')
-parser.add_argument('--train_file', type=str, default="./data/train/train.csv", help='The folder where spectrograms are placed')
-parser.add_argument('--val_file', type=str, default="./data/train/val.csv", help='The folder where spectrograms are placed')
+parser.add_argument('--train_file', type=str, default="./data/trainEqual.csv", help='The folder where spectrograms are placed')
+parser.add_argument('--val_file', type=str, default="./data/valEqual.csv", help='The folder where spectrograms are placed')
 
 parser.set_defaults(batch_norm=True)
 
@@ -47,7 +47,7 @@ print "==> %d validation examples" % len(val_list)
 args_dict = dict(args._get_kwargs())
 
 args_dict['train_list'] = train_list
-args_dict['val_list'] = test_list
+args_dict['val_list'] = val_list
     
 print "==> using network %s" % args.network
 
@@ -72,8 +72,7 @@ if args.load_state != "":
 def do_epoch(mode, epoch):
     # mode is 'train' or 'test' or 'predict'
     #print metrics.confusion_matrix(y_true, y_pred)
-    pass
-    '''
+    
     accuracy = sum([1 if t == p else 0 for t, p in zip(y_true, y_pred)])
     print "accuracy: %.2f percent" % (accuracy * 100.0 / batches_per_epoch / args.batch_size)
     

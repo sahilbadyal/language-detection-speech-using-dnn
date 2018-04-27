@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-CS224N 2016-17: Homework 3
 util.py: General utility routines
-Arun Chaganty <chaganty@stanford.edu>
 """
 
 from __future__ import division
@@ -15,6 +13,7 @@ import StringIO
 from collections import defaultdict, Counter, OrderedDict
 import numpy as np
 from numpy import array, zeros, allclose
+import csv
 
 logger = logging.getLogger("hw3")
 logger.setLevel(logging.DEBUG)
@@ -23,10 +22,13 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 def read_csv(fstream):
     """
     Reads a input stream @fstream (e.g. output of `open(fname, 'r')`) in CoNLL file format.
-    @returns a list of examples [(tokens), (labels)]. @tokens and @labels are lists of string.
+    @returns a list of examples [(fileName, label)]. @tokens and @labels are lists of string.
     """
     ret = []
     #impl to be written
+    reader = csv.reader(fstream,delimiter=',')
+    for row in reader:
+            ret.append((row[0],row[1]))
     return ret
 
 def test_read_csv():
@@ -300,6 +302,7 @@ class Progbar(object):
 def get_minibatches(data, minibatch_size, shuffle=True):
     """
     Iterates through the provided data one minibatch at at time. You can use this function to
+    
     iterate through data in minibatches as follows:
 
         for inputs_minibatch in get_minibatches(inputs, minibatch_size):

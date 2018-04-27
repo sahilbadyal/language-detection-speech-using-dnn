@@ -7,9 +7,9 @@ Common definitions for Lang Detection
 from util import one_hot
 
 LBLS = [
-    "EN",
-    "HI",
-    "O",
+    "0",
+    "1",
+    "2",
     ]
 NONE = "O"
 LMAP = {k: one_hot(3,i) for i, k in enumerate(LBLS)}
