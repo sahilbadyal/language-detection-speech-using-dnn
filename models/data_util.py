@@ -35,37 +35,33 @@ class ModelHelper(object):
         self.base_path = base_path
         self.n_classes = n_classes
 
-    def vectorize(self, image_data):
-            data = np.zeros((len(image_data), 1, 128, 858), dtype=np.float32)
-            for i,im in enumerate(image_data):
+    def vectorize(self, examples):
+            im_data = np.zeros((len(examples), self.n_channels, self.x_features, self.y_features), dtype=np.float32)
+            labels = []
+            for i,example in enumerate(examples):
+                    im = self.read_png(example[0])
                     im_array = np.array(im).astype(np.float32)
-                    data[i, 0, :, :] = im_array[:self.x_features, :] / 256.0
-            return data
+                    im_data[i, 0, :, :] = im_array[:self.x_features, :] / 256.0
+                    labels.append(one_hot(self.n_classes,int(example[1])))
+            return im_data,labels
 
     @classmethod
     def build(cls, data):
             return cls(data['n_channels'], data['x_features'], data['y_features'],data['base_path'],data['n_classes'])
 
 
-    def load_and_preprocess_data(self,examples_raw,labels_raw):
+    def load_and_preprocess_data(self,examples):
             logger.info("Loading  data...")
             
-            im_list = self.read_png(examples_raw)
-            logger.info("Done reading %d images", len(examples_raw))
             # now process all the input data.
-            data = self.vectorize(im_list)
-
-            processed_data = []
+            inputs,labels = self.vectorize(examples)
             
-            for i,example in enumerate(data):
-                    processed_data.append((example,one_hot(self.n_classes,int(labels_raw[i]))))
-            return processed_data
+            logger.info("Done reading %d images", len(examples))
 
-    def read_png(self,list_images):
-            list_im = []
-            for image in list_images:
-                    list_im.append(Image.open(self.base_path+str(image)+'.png'))
-            return list_im
+            return inputs,labels
+
+    def read_png(self,image):
+            return Image.open(self.base_path+str(image)+'.png')
 
 def getModelHelper(args):
         helper = ModelHelper.build(args)
@@ -76,7 +72,7 @@ def testModelHelper():
         args = {
                 'n_channels':1,
                 'x_features':128,
-                'y_features':856,
+                'y_features':858,
                 'base_path':'../data/train/png/',
                 'n_classes':3
         }
@@ -87,10 +83,11 @@ def testModelHelper():
 
         list2 = ['0','1','2','1','0','1','2','0']
 
-        pro_data  = helper.load_and_preprocess_data(list1,list2)
+        list_ = [(l,m) for l,m in zip(list1,list2) ] 
 
-        assert np.shape(pro_data) == (8, 2)
+        in_data,labels  = helper.load_and_preprocess_data(list_)
 
+        assert np.shape(in_data)== (8,1,128,858),np.shape(labels)==(8,3,)
 if __name__ == "__main__":
         testModelHelper()
 

@@ -16,10 +16,10 @@ from datetime import datetime
 import tensorflow as tf
 import numpy as np
 
-from util import print_sentence
-from data_util import load_and_preprocess_data, load_embeddings, ModelHelper
-from lang_detection_model import LangDetectionModel
-from defs import LBLS
+from models import  data_util
+from models.lang_detection_model import LangDetectionModel
+from models.defs import LBLS
+from models.data_util import getModelHelper
 
 logger = logging.getLogger("ld.cov.rnn")
 logger.setLevel(logging.DEBUG)
@@ -34,16 +34,14 @@ class Config:
     """
     n_channels = 1
     x_features = 128
-    y_features = 858 # Number of features for every word in the input.
-    max_length = 120 # longest sequence to parse
+    y_features = 858
     n_classes = 3
     dropout = 0.5
-    embed_size = 50
-    hidden_size = 300
     batch_size = 32
     n_epochs = 10
-    max_grad_norm = 10.
     lr = 0.001
+    log_output = './log'
+    lstm_size = 500
 
 class COVRNNModel(LangDetectionModel):
     """
@@ -112,33 +110,36 @@ class COVRNNModel(LangDetectionModel):
 
         dropout_rate = self.dropout_placeholder
 
+        input_layer = tf.reshape(input_layer,[-1,self.config.y_features,self.config.x_features,self.config.n_channels])
+
         # Define U and b2 as variables.
         # Initialize state as vector of zeros.
-        xavier_init = tf.contrib.layers.xavier_initializer()
-        init = tf.constant_initializer(0)
-        U = tf.get_variable(name='U',shape=[self.config.hidden_size,self.config.n_classes],dtype=tf.float32,initializer=xavier_init)
-        b2 = tf.get_variable(name='b2',shape=[self.config.n_classes],dtype=tf.float32,initializer=init) 
-        h_0 =  tf.zeros(shape=[tf.shape(input_layer)[0],self.config.hidden_size],dtype=tf.float32)
+        #xavier_init = tf.contrib.layers.xavier_initializer()
+        #init = tf.constant_initializer(0)
+        #U = tf.get_variable(name='U',shape=[self.config.hidden_size,self.config.n_classes],dtype=tf.float32,initializer=xavier_init)
+        #b2 = tf.get_variable(name='b2',shape=[self.config.n_classes],dtype=tf.float32,initializer=init) 
+        #h_0 =  tf.zeros(shape=[tf.shape(input_layer)[0],self.config.hidden_size],dtype=tf.float32)
 
         conv1 = tf.layers.conv2d(
                       inputs=input_layer,
                       filters=32,
-                      kernel_size=[3, 3],
+                      kernel_size=[5, 5],
                       padding="same",
                       activation=tf.nn.relu)
-        pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[3, 3], strides=2)
+
+        pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[3, 3], strides=3)
         
         #Add batch Norm
-        output_cnn = tf.contrib.layers.batch_norm(pool1, center=True, scale=True, is_training=self.isTraining,scope='bn_2')
+        output_cnn_1 = tf.contrib.layers.batch_norm(pool1, center=True, scale=True, is_training=self.isTraining,scope='bn_1')
 
 
         conv2 = tf.layers.conv2d(
-                      inputs=pool1,
+                      inputs=output_cnn_1,
                       filters=32,
                       kernel_size=[3, 3],
                       padding="same",
                       activation=tf.nn.relu)
-        pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=2)
+        pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
 
         #add batch norm
 
@@ -151,23 +152,25 @@ class COVRNNModel(LangDetectionModel):
         # We squezed all data channel wise and fed it into an rnn
         channels = []
         for channel_index in range(num_channels):
-                channels.append(output[:, channel_index, :, :].transpose((0, 2, 1)))
+                channels.append(tf.transpose(output_cnn[:, channel_index, :, :],perm=[0, 2, 1]))
 
         ##Add rnn here
         with tf.name_scope('lstm_layer'):
                 lstm = tf.contrib.rnn.BasicLSTMCell(self.config.lstm_size)
         with tf.name_scope('dropout'):
                 cell = tf.contrib.rnn.DropoutWrapper(lstm, output_keep_prob=1-dropout_rate)
-        
+        rnn_network_outputs = []
 
         for i,channel in enumerate(channels):
+                params = tf.reshape(channel,[-1,filter_W*filter_H])
                 if(i==0):
-                        initial_state = cell.zero_state(tf.shape(channel)[0] , tf.float32)
-                        outputs, state = cell(inputs=channel,state=initial_state)
-                 else:
-                        outputs, state = cell(inputs=channel,state=state)
+                        initial_state = cell.zero_state(tf.shape(params)[0] , tf.float32)
+                        outputs, state = cell(inputs=params,state=initial_state)
+                else:
+                        outputs, state = cell(inputs=params,state=state)
+                rnn_network_outputs.append(outputs)
         
-        output_rnn = tf.stack(outputs,axis=1)
+        output_rnn = tf.stack(rnn_network_outputs,axis=1)
 
         ##final batch normalization
         
@@ -175,8 +178,8 @@ class COVRNNModel(LangDetectionModel):
 
 
         ##Add fully connected layer
-         with tf.name_scope('affine_layer'):
-                 preds = tf.contrib.layers.fully_connected(outputs,self.config.n_class, activation_fn=None)
+        with tf.name_scope('affine_layer'):
+                 preds = tf.contrib.layers.fully_connected(outputs,self.config.n_classes, activation_fn=None)
 
         return preds
 
@@ -189,7 +192,7 @@ class COVRNNModel(LangDetectionModel):
         Returns:
             loss: A 0-d tensor (scalar)
         """
-        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.labels_placeholder,logits=preds))
+        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.labels_placeholder,logits=preds))
         return loss
 
     def add_training_op(self, loss):
@@ -216,20 +219,15 @@ class COVRNNModel(LangDetectionModel):
         return train_op
 
     def preprocess_speech_data(self, examples):
-        def featurize_windows(data, start, end, window_size = 1):
-            """Uses the input sequences in @data to construct new windowed data points.
-            """
-            ret = []
-            for sentence, labels in data:
-                from util import window_iterator
-                sentence_ = []
-                for window in window_iterator(sentence, window_size, beg=start, end=end):
-                    sentence_.append(sum(window, []))
-                ret.append((sentence_, labels))
-            return ret
+        """
+        This function accepts examples and uses model helper to convert them into vectors 
+        Args:
+            examples: a list of examples of format (input,label)
+        Returns:
+            inputs,labels: The vectorized input and labels for training.
 
-        examples = featurize_windows(examples, self.helper.START, self.helper.END)
-        return pad_sequences(examples, self.max_length)
+        """
+        return self.helper.load_and_preprocess_data(examples)
 
     def consolidate_predictions(self, examples_raw, examples, preds):
         """Batch the predictions into groups of sentence length.
@@ -238,41 +236,38 @@ class COVRNNModel(LangDetectionModel):
         assert len(examples_raw) == len(preds)
 
         ret = []
-        for i, (sentence, labels) in enumerate(examples_raw):
+        for i, (images, labels) in enumerate(examples_raw):
             _, _, mask = examples[i]
             labels_ = [l for l, m in zip(preds[i], mask) if m] # only select elements of mask.
             assert len(labels_) == len(labels)
             ret.append([sentence, labels, labels_])
         return ret
 
-    def predict_on_batch(self, sess, inputs_batch, mask_batch):
-        feed = self.create_feed_dict(inputs_batch=inputs_batch, mask_batch=mask_batch)
+    def predict_on_batch(self, sess, inputs_batch):
+        feed = self.create_feed_dict(inputs_batch=inputs_batch)
         predictions = sess.run(tf.argmax(self.pred, axis=2), feed_dict=feed)
         return predictions
 
-    def train_on_batch(self, sess, inputs_batch, labels_batch, mask_batch):
-        feed = self.create_feed_dict(inputs_batch, labels_batch=labels_batch, mask_batch=mask_batch,
-                                     dropout=Config.dropout)
+    def train_on_batch(self, sess, inputs_batch, labels_batch):
+        feed = self.create_feed_dict(inputs_batch, labels_batch=labels_batch,dropout=Config.dropout)
         _, loss = sess.run([self.train_op, self.loss], feed_dict=feed)
         return loss
 
-    def __init__(self, helper, config, pretrained_embeddings, report=None):
-        super(RNNModel, self).__init__(helper, config, report)
-        self.max_length = min(Config.max_length, helper.max_length)
-        Config.max_length = self.max_length # Just in case people make a mistake.
-        self.pretrained_embeddings = pretrained_embeddings
+    def __init__(self, helper, config):
+        super(COVRNNModel, self).__init__(helper, config)
 
         # Defining placeholders.
         self.input_placeholder = None
         self.labels_placeholder = None
         self.dropout_placeholder = None
+        self.isTraining = True
 
         self.build()
 
 def do_test2(args):
     logger.info("Testing implementation of RNNModel")
     config = Config(args)
-    helper, train, dev, train_raw, dev_raw = load_and_preprocess_data(args)
+    helper = getModelHelper(args)
     embeddings = load_embeddings(args, helper)
     config.embed_size = embeddings.shape[1]
 
@@ -294,11 +289,20 @@ def do_test2(args):
 
 def do_train(args):
     # Set up some parameters.
-    config = Config(args)
-    helper, train, dev, train_raw, dev_raw = load_and_preprocess_data(args)
-    embeddings = load_embeddings(args, helper)
-    config.embed_size = embeddings.shape[1]
-    helper.save(config.output_path)
+    config = Config()
+    helper_args = {
+                'n_channels':config.n_channels,
+                'x_features':config.x_features,
+                'y_features':config.y_features,
+                'base_path' :args['png_folder'],
+                'n_classes':config.n_classes
+    }
+    helper = getModelHelper(helper_args)
+
+    train = args['train_list']
+    dev = args['val_list']
+    
+    #helper.save(config.output_path)
 
     handler = logging.FileHandler(config.log_output)
     handler.setLevel(logging.DEBUG)
@@ -310,7 +314,7 @@ def do_train(args):
     with tf.Graph().as_default():
         logger.info("Building model...",)
         start = time.time()
-        model = RNNModel(helper, config, embeddings)
+        model = COVRNNModel(helper, config)
         logger.info("took %.2f seconds", time.time() - start)
 
         init = tf.global_variables_initializer()
@@ -320,21 +324,24 @@ def do_train(args):
             session.run(init)
             model.fit(session, saver, train, dev)
             if report:
-                report.log_output(model.output(session, dev_raw))
+                report.log_output(model.output(session, dev))
                 report.save()
             else:
                 # Save predictions in a text file.
-                output = model.output(session, dev_raw)
-                sentences, labels, predictions = zip(*output)
+                output = model.output(session, dev)
+                images, labels, predictions = zip(*output)
                 predictions = [[LBLS[l] for l in preds] for preds in predictions]
-                output = zip(sentences, labels, predictions)
+                output = zip(images, labels, predictions)
 
                 with open(model.config.conll_output, 'w') as f:
-                    write_conll(f, output)
-                with open(model.config.eval_output, 'w') as f:
-                    for sentence, labels, predictions in output:
-                        print_sentence(f, sentence, labels, predictions)
+                    write_csv(f, output)
+                #with open(model.config.eval_output, 'w') as f:
+                #    for sentence, labels, predictions in output:
+                #        print_sentence(f, sentence, labels, predictions)
 
+def name():
+        return "COVNETWITHRNN"
+'''
 def do_evaluate(args):
     config = Config(args)
     helper = ModelHelper.load(args.model_path)
@@ -345,7 +352,7 @@ def do_evaluate(args):
     with tf.Graph().as_default():
         logger.info("Building model...",)
         start = time.time()
-        model = RNNModel(helper, config, embeddings)
+        model = COVRNNModel(helper, config)
 
         logger.info("took %.2f seconds", time.time() - start)
 
@@ -357,4 +364,4 @@ def do_evaluate(args):
             saver.restore(session, model.config.model_output)
             for sentence, labels, predictions in model.output(session, input_data):
                 predictions = [LBLS[l] for l in predictions]
-                print_sentence(args.output, sentence, labels, predictions)
+                print_sentence(args.output, sentence, labels, predictions)'''

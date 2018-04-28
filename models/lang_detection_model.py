@@ -6,10 +6,10 @@ A model for language detection in speech
 import logging
 
 import tensorflow as tf
-from model import Model
-from util import ConfusionMatrix, Progbar, minibatches
-from data_util import get_chunks
-from defs import LBLS
+from models.base_model import Model
+from models.util import ConfusionMatrix, Progbar, minibatches
+#from models.data_util import get_chunks
+from models.defs import LBLS
 
 logger = logging.getLogger("langDec.model")
 logger.setLevel(logging.DEBUG)
@@ -20,10 +20,9 @@ class LangDetectionModel(Model):
     Implements special functionality for Spoken Language Detection models.
     """
 
-    def __init__(self, helper, config, report=None):
+    def __init__(self, helper, config):
         self.helper = helper
         self.config = config
-        self.report = report
 
     def preprocess_speech_data(self, examples):
         """Preprocess sequence data for the model.
@@ -35,7 +34,7 @@ class LangDetectionModel(Model):
         """
         raise NotImplementedError("Each Model must re-implement this method.")
 
-    def evaluate(self, sess, examples, examples_raw):
+    def evaluate(self, sess, examples_raw):
         """Evaluates model performance on @examples.
 
         This function uses the model to predict labels for @examples and constructs a confusion matrix.
@@ -47,15 +46,16 @@ class LangDetectionModel(Model):
         Returns:
             The F1 score for predicting input as language entities.
         """
-        #IMPLEMENTATION OF EVALUATION FUNCTION HERE
         class_cm = ConfusionMatrix(labels=LBLS)
 
         correct_preds, total_correct, total_preds = 0., 0., 0.
-        for _, labels, labels_  in self.output(sess, examples_raw, examples):
+
+        #need to correct
+        for _, actual, pred  in self.output(sess, examples_raw):
             for l, l_ in zip(labels, labels_):
                 token_cm.update(l, l_)
-            actual = set(get_chunks(labels))
-            pred = set(get_chunks(labels_))
+            #actual = set(get_chunks(labels))
+            #pred = set(get_chunks(labels_))
             correct_preds += len(actual.intersection(pred))
             total_preds += len(pred)
             total_actual += len(actual)
@@ -67,49 +67,44 @@ class LangDetectionModel(Model):
         return class_cm, (p, r, f1)
 
 
-    def output(self, sess, inputs_raw, inputs=None):
+    def output(self, sess, inputs_raw):
         """
         Reports the output of the model on examples (uses helper to featurize each example).
         """
-        if inputs is None:
-            inputs = self.preprocess_speech_data(self.helper.vectorize(inputs_raw))
-
+        inputs = []
         preds = []
-        prog = Progbar(target=1 + int(len(inputs) / self.config.batch_size))
-        for i, batch in enumerate(minibatches(inputs, self.config.batch_size, shuffle=False)):
-            # Ignore predict
-            batch = batch[:1] + batch[2:]
-            preds_ = self.predict_on_batch(sess, *batch)
+        prog = Progbar(target=1 + int(len(inputs_raw) / self.config.batch_size))
+        for i, batch in enumerate(minibatches(inputs_raw, self.config.batch_size, shuffle=False)):
+            inputs_,labels = self.preprocess_speech_data(batch)
+            preds_ = self.predict_on_batch(sess, inputs)
             preds += list(preds_)
+            inputs += list(inputs_)
             prog.update(i + 1, [])
         return self.consolidate_predictions(inputs_raw, inputs, preds)
 
     def fit(self, sess, saver, train_examples_raw, dev_set_raw):
         best_score = 0.
 
-        train_examples = self.preprocess_speech_data(train_examples_raw)
-        dev_set = self.preprocess_speech_data(dev_set_raw)
 
         for epoch in range(self.config.n_epochs):
             logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
             # You may use the progress bar to monitor the training progress
             # Addition of progress bar will not be graded, but may help when debugging
-            n_minibatches = 1 + int(len(train_examples) / self.config.batch_size)
+            n_minibatches = 1 + int(len(train_examples_raw) / self.config.batch_size)
             prog = Progbar(target=n_minibatches)
 			# The general idea is to loop over minibatches from train_examples, and run train_on_batch inside the loop
 			# Hint: train_examples could be a list containing the feature data and label data
 			# Read the doc for utils.get_minibatches to find out how to use it.
                         # Note that get_minibatches could either return a list, or a list of list
                         # [features, labels]. This makes expanding tuples into arguments (* operator) handy
-
-            ### YOUR CODE HERE (2-3 lines)
-            for i,batch in enumerate(minibatches(train_examples,self.config.batch_size)):
-                    loss = self.train_on_batch(sess,*batch)
+            
+            for i,batch in enumerate(minibatches(train_examples_raw,self.config.batch_size)):
+                    inputs,labels = self.preprocess_speech_data(batch)
+                    loss = self.train_on_batch(sess,inputs,labels)
                     prog.update(i+1,[("loss",loss)])
-            ### END YOUR CODE
 
             logger.info("Evaluating on development data")
-            language_cm, entity_scores = self.evaluate(sess, dev_set, dev_set_raw)
+            language_cm, entity_scores = self.evaluate(sess, dev_set_raw)
             logger.debug("Lang-level confusion matrix:\n" + language_cm.as_table())
             logger.debug("Lang-level scores:\n" + token_cm.summary())
             logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
@@ -122,7 +117,4 @@ class LangDetectionModel(Model):
                     logger.info("New best score! Saving model in %s", self.config.model_output)
                     saver.save(sess, self.config.model_output)
             print("")
-            if self.report:
-                self.report.log_epoch()
-                self.report.save()
         return best_score
