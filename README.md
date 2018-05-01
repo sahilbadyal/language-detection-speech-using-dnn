@@ -1,4 +1,4 @@
-# Specch language identification with deep learning in tensorflow:
+# Speech language identification with deep learning using Tensorflow:
 
 This work is tensorflow implementation of work by [By Hrayr Harutyunyan and Hrant Khachatrian](http://yerevann.github.io/2016/06/26/combining-cnn-and-rnn-for-spoken-language-identification/). Though this is written to classify data into English, Hindi and Others. This can easily be extended for original 176 languages.
 
