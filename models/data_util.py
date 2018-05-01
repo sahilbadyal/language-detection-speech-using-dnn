@@ -51,7 +51,8 @@ class ModelHelper(object):
 
 
     def load_and_preprocess_data(self,examples):
-            logger.info("Loading  data...")
+            print(examples[0])
+            logger.info("Loading  data...%d ",len(examples))
             
             # now process all the input data.
             inputs,labels = self.vectorize(examples)

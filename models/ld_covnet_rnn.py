@@ -74,7 +74,7 @@ class COVRNNModel(LangDetectionModel):
         self.labels_placeholder = tf.placeholder(shape=[None,self.config.n_classes],dtype=tf.int32)
         self.dropout_placeholder = tf.placeholder(shape=(),dtype=tf.float32)
 
-    def create_feed_dict(self, inputs_batch, mask_batch, labels_batch=None, dropout=0):
+    def create_feed_dict(self, inputs_batch, labels_batch=None, dropout=0):
         """Creates the feed_dict for the dependency parser.
 
         A feed_dict takes the form of:
@@ -110,7 +110,8 @@ class COVRNNModel(LangDetectionModel):
 
         dropout_rate = self.dropout_placeholder
 
-        input_layer = tf.reshape(input_layer,[-1,self.config.y_features,self.config.x_features,self.config.n_channels])
+
+        input_layer = tf.reshape(input_layer,shape=[-1,self.config.x_features,self.config.y_features,self.config.n_channels])
 
         # Define U and b2 as variables.
         # Initialize state as vector of zeros.
@@ -122,12 +123,12 @@ class COVRNNModel(LangDetectionModel):
 
         conv1 = tf.layers.conv2d(
                       inputs=input_layer,
-                      filters=32,
-                      kernel_size=[5, 5],
+                      filters=16,
+                      kernel_size=[7, 7],
                       padding="same",
                       activation=tf.nn.relu)
 
-        pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[3, 3], strides=3)
+        pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[3, 3], strides=2,padding='same')
         
         #Add batch Norm
         output_cnn_1 = tf.contrib.layers.batch_norm(pool1, center=True, scale=True, is_training=self.isTraining,scope='bn_1')
@@ -136,31 +137,63 @@ class COVRNNModel(LangDetectionModel):
         conv2 = tf.layers.conv2d(
                       inputs=output_cnn_1,
                       filters=32,
+                      kernel_size=[5, 5],
+                      padding="same",
+                      activation=tf.nn.relu)
+        pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=2,padding='same')
+        
+        conv3 = tf.layers.conv2d(
+                      inputs=pool2,
+                      filters=32,
                       kernel_size=[3, 3],
                       padding="same",
                       activation=tf.nn.relu)
-        pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
+        pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[3, 3], strides=2,padding='same')
+        
+        conv4 = tf.layers.conv2d(
+                      inputs=pool3,
+                      filters=32,
+                      kernel_size=[3, 3],
+                      padding="same",
+                      activation=tf.nn.relu)
+        pool4 = tf.layers.max_pooling2d(inputs=conv4, pool_size=[3, 3], strides=2,padding='same')
+        
+        #conv5 = tf.layers.conv2d(
+        #              inputs=pool4,
+        #              filters=32,
+        #              kernel_size=[3, 3],
+        #              padding="same",
+        #              activation=tf.nn.relu)
+        
+        #pool5 = tf.layers.max_pooling2d(inputs=conv5, pool_size=[3, 3], strides=2,padding='same')
 
         #add batch norm
 
-        output_cnn = tf.contrib.layers.batch_norm(pool2, center=True, scale=True, is_training=self.isTraining,scope='bn_2')
+        output_cnn = tf.contrib.layers.batch_norm(pool4, center=True, scale=True, is_training=self.isTraining,scope='bn_2')
 
         num_channels  = 32
         filter_W = 54
         filter_H = 8
 
         # We squezed all data channel wise and fed it into an rnn
-        channels = []
-        for channel_index in range(num_channels):
-                channels.append(tf.transpose(output_cnn[:, channel_index, :, :],perm=[0, 2, 1]))
+        #channels = []
+        #for channel_index in range(num_channels):
+        #        channels.append(tf.transpose(output_cnn[:, :, :,channel_index],perm=[0, 2, 1]))
+        
+        input_rnn = tf.reshape(output_cnn,shape=[-1,num_channels,filter_H*filter_W])
 
         ##Add rnn here
+        
         with tf.name_scope('lstm_layer'):
-                lstm = tf.contrib.rnn.BasicLSTMCell(self.config.lstm_size)
+                gru = tf.contrib.rnn.GRUCell(self.config.lstm_size)
         with tf.name_scope('dropout'):
-                cell = tf.contrib.rnn.DropoutWrapper(lstm, output_keep_prob=1-dropout_rate)
+                cell = tf.contrib.rnn.DropoutWrapper(gru, output_keep_prob=1-dropout_rate)
         rnn_network_outputs = []
-
+                        
+        initial_state = cell.zero_state(tf.shape(input_rnn)[0] , tf.float32)
+        output_rnn,_ = tf.nn.dynamic_rnn(cell,input_rnn,initial_state=initial_state)
+        
+        '''
         for i,channel in enumerate(channels):
                 params = tf.reshape(channel,[-1,filter_W*filter_H])
                 if(i==0):
@@ -171,7 +204,7 @@ class COVRNNModel(LangDetectionModel):
                 rnn_network_outputs.append(outputs)
         
         output_rnn = tf.stack(rnn_network_outputs,axis=1)
-
+        '''
         ##final batch normalization
         
         outputs = tf.contrib.layers.batch_norm(output_rnn, center=True, scale=True, is_training=self.isTraining,scope='bn_3')
@@ -179,7 +212,7 @@ class COVRNNModel(LangDetectionModel):
 
         ##Add fully connected layer
         with tf.name_scope('affine_layer'):
-                 preds = tf.contrib.layers.fully_connected(outputs,self.config.n_classes, activation_fn=None)
+                preds = tf.contrib.layers.fully_connected(outputs[:,-1],self.config.n_classes, activation_fn=None)
 
         return preds
 
@@ -228,7 +261,7 @@ class COVRNNModel(LangDetectionModel):
 
         """
         return self.helper.load_and_preprocess_data(examples)
-
+    
     def consolidate_predictions(self, examples_raw, examples, preds):
         """Batch the predictions into groups of sentence length.
         """
@@ -236,16 +269,14 @@ class COVRNNModel(LangDetectionModel):
         assert len(examples_raw) == len(preds)
 
         ret = []
-        for i, (images, labels) in enumerate(examples_raw):
-            _, _, mask = examples[i]
-            labels_ = [l for l, m in zip(preds[i], mask) if m] # only select elements of mask.
-            assert len(labels_) == len(labels)
-            ret.append([sentence, labels, labels_])
+        for i, (image, label) in enumerate(examples_raw):
+            labels_ = preds[i] # only select elements of mask.
+            ret.append([image, int(label), labels_])
         return ret
-
+    
     def predict_on_batch(self, sess, inputs_batch):
         feed = self.create_feed_dict(inputs_batch=inputs_batch)
-        predictions = sess.run(tf.argmax(self.pred, axis=2), feed_dict=feed)
+        predictions = sess.run(tf.argmax(self.pred, axis=1), feed_dict=feed)
         return predictions
 
     def train_on_batch(self, sess, inputs_batch, labels_batch):
@@ -301,6 +332,9 @@ def do_train(args):
 
     train = args['train_list']
     dev = args['val_list']
+
+    train = train
+    dev = dev
     
     #helper.save(config.output_path)
 
@@ -323,18 +357,18 @@ def do_train(args):
         with tf.Session() as session:
             session.run(init)
             model.fit(session, saver, train, dev)
-            if report:
-                report.log_output(model.output(session, dev))
-                report.save()
-            else:
+            #if report:
+            #    report.log_output(model.output(session, dev))
+            #    report.save()
+            #else:
                 # Save predictions in a text file.
-                output = model.output(session, dev)
-                images, labels, predictions = zip(*output)
-                predictions = [[LBLS[l] for l in preds] for preds in predictions]
-                output = zip(images, labels, predictions)
+            #    output = model.output(session, dev)
+            #    images, labels, predictions = zip(*output)
+            #    predictions = [[LBLS[l] for l in preds] for preds in predictions]
+            #    output = zip(images, labels, predictions)
 
-                with open(model.config.conll_output, 'w') as f:
-                    write_csv(f, output)
+            #    with open(model.config.conll_output, 'w') as f:
+            #        write_csv(f, output)
                 #with open(model.config.eval_output, 'w') as f:
                 #    for sentence, labels, predictions in output:
                 #        print_sentence(f, sentence, labels, predictions)
@@ -364,4 +398,5 @@ def do_evaluate(args):
             saver.restore(session, model.config.model_output)
             for sentence, labels, predictions in model.output(session, input_data):
                 predictions = [LBLS[l] for l in predictions]
-                print_sentence(args.output, sentence, labels, predictions)'''
+                print_sentence(args.output, sentence, labels, predictions)
+                '''

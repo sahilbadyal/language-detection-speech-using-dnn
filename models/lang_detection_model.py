@@ -47,24 +47,28 @@ class LangDetectionModel(Model):
             The F1 score for predicting input as language entities.
         """
         class_cm = ConfusionMatrix(labels=LBLS)
-
+        
+        total_images = set()
+        correct_preds = set()
         correct_preds, total_correct, total_preds = 0., 0., 0.
 
         #need to correct
         for _, actual, pred  in self.output(sess, examples_raw):
-            for l, l_ in zip(labels, labels_):
-                token_cm.update(l, l_)
+            print(actual,pred)
+            class_cm.update(actual, pred)
+            #total_images.
             #actual = set(get_chunks(labels))
             #pred = set(get_chunks(labels_))
-            correct_preds += len(actual.intersection(pred))
-            total_preds += len(pred)
-            total_actual += len(actual)
+  
+            #correct_preds += len(actual.intersection(pred))
+            #total_preds += len(pred)
+            #total_actual += len(actual)
 
-        p = correct_preds / total_preds if correct_preds > 0 else 0
-        r = correct_preds / total_correct if correct_preds > 0 else 0
+        #p = correct_preds / total_preds if correct_preds > 0 else 0
+        #r = correct_preds / total_correct if correct_preds > 0 else 0
 
-        f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
-        return class_cm, (p, r, f1)
+        #f1 = 2 * p * r / (p + r) if correct_preds > 0 else 0
+        return class_cm
 
 
     def output(self, sess, inputs_raw):
@@ -76,7 +80,7 @@ class LangDetectionModel(Model):
         prog = Progbar(target=1 + int(len(inputs_raw) / self.config.batch_size))
         for i, batch in enumerate(minibatches(inputs_raw, self.config.batch_size, shuffle=False)):
             inputs_,labels = self.preprocess_speech_data(batch)
-            preds_ = self.predict_on_batch(sess, inputs)
+            preds_ = self.predict_on_batch(sess, inputs_)
             preds += list(preds_)
             inputs += list(inputs_)
             prog.update(i + 1, [])
@@ -104,17 +108,17 @@ class LangDetectionModel(Model):
                     prog.update(i+1,[("loss",loss)])
 
             logger.info("Evaluating on development data")
-            language_cm, entity_scores = self.evaluate(sess, dev_set_raw)
+            language_cm = self.evaluate(sess, dev_set_raw)
             logger.debug("Lang-level confusion matrix:\n" + language_cm.as_table())
-            logger.debug("Lang-level scores:\n" + token_cm.summary())
-            logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
+            logger.debug("Lang-level scores:\n" + language_cm.summary())
+            #logger.info("Entity level P/R/F1: %.2f/%.2f/%.2f", *entity_scores)
 
-            score = entity_scores[-1]
+            #score = entity_scores[-1]
             
-            if score > best_score:
-                best_score = score
-                if saver:
-                    logger.info("New best score! Saving model in %s", self.config.model_output)
-                    saver.save(sess, self.config.model_output)
+            #if score > best_score:
+            #    best_score = score
+            #    if saver:
+            #        logger.info("New best score! Saving model in %s", self.config.model_output)
+            #        saver.save(sess, self.config.model_output)
             print("")
         return best_score

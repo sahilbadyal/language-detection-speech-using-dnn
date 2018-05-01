@@ -342,6 +342,6 @@ def minibatch(data, minibatch_idx):
     return data[minibatch_idx] if type(data) is np.ndarray else [data[i] for i in minibatch_idx]
 
 def minibatches(data, batch_size, shuffle=True):
-    batches = [np.array(col) for col in zip(*data)]
+    batches = data
     return get_minibatches(batches, batch_size, shuffle)
 
