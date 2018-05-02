@@ -81,6 +81,7 @@ class LangDetectionModel(Model):
         for i, batch in enumerate(minibatches(inputs_raw, self.config.batch_size, shuffle=False)):
             inputs_,labels = self.preprocess_speech_data(batch)
             preds_ = self.predict_on_batch(sess, inputs_)
+            print inputs_[0],preds_[0]
             preds += list(preds_)
             inputs += list(inputs_)
             prog.update(i + 1, [])

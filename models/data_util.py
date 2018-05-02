@@ -7,12 +7,11 @@ import os
 import logging
 import PIL.Image as Image
 import numpy as np
-from defs import LBLS
-from util import one_hot
+from defs import LMAP
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
+logging.basicConfig(filename=__name__+'.log',format='%(levelname)s:%(message)s', level=logging.DEBUG)
 
 
 def evaluate(model, X, Y):
@@ -42,12 +41,12 @@ class ModelHelper(object):
                     im = self.read_png(example[0])
                     im_array = np.array(im).astype(np.float32)
                     im_data[i, 0, :, :] = im_array[:self.x_features, :] / 256.0
-                    labels.append(one_hot(self.n_classes,int(example[1])))
+                    labels.append(LMAP[int(example[1])])
             return im_data,labels
 
     @classmethod
     def build(cls, data):
-            return cls(data['n_channels'], data['x_features'], data['y_features'],data['base_path'],data['n_classes'])
+            return cls(data.n_channels, data.x_features, data.y_features,data.png_folder,data.n_classes)
 
 
     def load_and_preprocess_data(self,examples):

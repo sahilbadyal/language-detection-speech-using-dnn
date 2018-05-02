@@ -72,8 +72,6 @@ if args.mode == 'train':
     print "==> training"
     network.do_train(args_dict)
 elif args.mode == 'test':
-    network.do_evaluate()
-elif args.mode == 'test_on_train':
-    do_epoch('predict_on_train', 0)
+    network.do_evaluate(args_dict)
 else:
     raise Exception("unknown mode")
