@@ -50,13 +50,13 @@ class ModelHelper(object):
 
 
     def load_and_preprocess_data(self,examples):
-            print(examples[0])
-            logger.info("Loading  data...%d ",len(examples))
+            #print(examples[0])
+            #logger.info("Loading  data...%d ",len(examples))
             
             # now process all the input data.
             inputs,labels = self.vectorize(examples)
             
-            logger.info("Done reading %d images", len(examples))
+            #logger.info("Done reading %d images", len(examples))
 
             return inputs,labels
 
@@ -68,16 +68,30 @@ def getModelHelper(args):
         return helper
 
 
-def testModelHelper():
-        args = {
-                'n_channels':1,
-                'x_features':128,
-                'y_features':858,
-                'base_path':'../data/train/png/',
-                'n_classes':3
-        }
+class Config:
+        """Holdsmodelhyperparamsanddatainformation.
 
-        helper = getModelHelper(args)
+        Theconfigclassisusedtostorevarioushyperparametersanddataset
+        informationparameters.ModelobjectsarepassedaConfig()objectat
+        instantiation.
+        """
+        n_channels=1
+        x_features=128
+        y_features=858
+        n_classes=3
+        dropout=0.5
+        batch_size=32
+        n_epochs=1
+        lr=0.001
+        batch_size=32
+        lstm_size=500
+        png_folder='../data/train/png/'
+
+def testModelHelper():
+
+        config = Config()
+
+        helper = getModelHelper(config)
 
         list1 = ['0aaatsgitup', '0aardcafriy', '0aaus1iol2h', '0aboxbqzx2n', '0abyp4czxgr', '0acbkn5sl3x', '0acwgcalkob', '0acwmldxgzf']
 
@@ -87,7 +101,10 @@ def testModelHelper():
 
         in_data,labels  = helper.load_and_preprocess_data(list_)
 
+        #y = {k:i for k,i in zip(list_,labels)}
+        #print y
+
         assert np.shape(in_data)== (8,1,128,858),np.shape(labels)==(8,3,)
 if __name__ == "__main__":
-        testModelHelper()
+        testModelHelper#()
 

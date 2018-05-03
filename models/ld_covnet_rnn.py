@@ -38,7 +38,7 @@ class Config:
     n_classes = 3
     dropout = 0.5
     batch_size = 32
-    n_epochs = 1
+    n_epochs = 10
     lr = 0.001
     batch_size = 32
     lstm_size = 500
@@ -54,8 +54,8 @@ class Config:
             #self.model_output = self.output_path + "model.weights"
             #self.eval_output = self.output_path + "results.txt"
             self.log_output = self.output_path + "log"
-            self.batch_size = args['batch_size']
-            self.lstm_size = args['rnn_num_units']
+            #self.batch_size = args['batch_size']
+            #self.lstm_size = args['rnn_num_units']
             self.png_folder = args['png_folder']
 
 class COVRNNModel(LangDetectionModel):
@@ -260,7 +260,7 @@ class COVRNNModel(LangDetectionModel):
         return ret
     
     def predict_on_batch(self, sess, inputs_batch):
-        feed = self.create_feed_dict(inputs_batch=inputs_batch,training=True)
+        feed = self.create_feed_dict(inputs_batch=inputs_batch,training=False)
         predictions = sess.run(tf.argmax(self.pred, axis=1), feed_dict=feed)
         return predictions
 
@@ -293,8 +293,8 @@ def do_train(args):
     }
     helper = getModelHelper(config)
 
-    train = args['train_list'][:2*32]
-    dev = args['val_list'][:1*32]
+    train = args['train_list']
+    dev = args['val_list']
 
     #helper.save(config.output_path)
 
