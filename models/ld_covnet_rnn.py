@@ -32,6 +32,7 @@ class Config:
     information parameters. Model objects are passed a Config() object at
     instantiation.
     """
+    rnn_dropout = False
     n_channels = 1
     x_features = 128
     y_features = 858
@@ -40,7 +41,7 @@ class Config:
     batch_size = 32
     n_epochs = 10
     lr = 0.001
-    batch_size = 32
+    batch_norm = True
     lstm_size = 500
     png_folder = ''
 
@@ -54,7 +55,7 @@ class Config:
             #self.model_output = self.output_path + "model.weights"
             #self.eval_output = self.output_path + "results.txt"
             self.log_output = self.output_path + "log"
-            #self.batch_size = args['batch_size']
+            self.batch_norm = True
             #self.lstm_size = args['rnn_num_units']
             self.png_folder = args['png_folder']
 
@@ -137,10 +138,13 @@ class COVRNNModel(LangDetectionModel):
                       padding="same",
                       activation=tf.nn.relu)
 
-        pool1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[3, 3], strides=2,padding='same')
+        output_cnn_1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[3, 3], strides=2,padding='same')
         
         #Add batch Norm
-        output_cnn_1 = tf.contrib.layers.batch_norm(pool1, center=True, scale=True, is_training=self.isTraining,scope='bn_1')
+        if self.config.batch_norm:
+                output_cnn_1 = tf.contrib.layers.batch_norm(output_cnn_1, center=True, scale=True, is_training=self.isTraining,scope='bn_1')
+        
+        self.shapeOfCNN1 = tf.shape(output_cnn_1)
 
 
         conv2 = tf.layers.conv2d(
@@ -149,31 +153,44 @@ class COVRNNModel(LangDetectionModel):
                       kernel_size=[5, 5],
                       padding="same",
                       activation=tf.nn.relu)
-        pool2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=2,padding='same')
+        output_cnn_2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=2,padding='same')
+        
+        self.shapeOfCNN2 = tf.shape(output_cnn_2)
+        
+        #Add batch Norm
+        if self.config.batch_norm:
+                output_cnn_2 = tf.contrib.layers.batch_norm(output_cnn_2, center=True, scale=True, is_training=self.isTraining,scope='bn_2')
         
         conv3 = tf.layers.conv2d(
-                      inputs=pool2,
+                      inputs=output_cnn_2,
                       filters=32,
                       kernel_size=[3, 3],
                       padding="same",
                       activation=tf.nn.relu)
-        pool3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[3, 3], strides=2,padding='same')
+        output_cnn_3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[3, 3], strides=2,padding='same')
+        
+        #Add batch Norm
+        if self.config.batch_norm:
+                output_cnn_3 = tf.contrib.layers.batch_norm(output_cnn_3, center=True, scale=True, is_training=self.isTraining,scope='bn_3')
+        
+        self.shapeOfCNN3 = tf.shape(output_cnn_3)
         
         conv4 = tf.layers.conv2d(
-                      inputs=pool3,
+                      inputs=output_cnn_3,
                       filters=32,
                       kernel_size=[3, 3],
                       padding="same",
                       activation=tf.nn.relu)
-        pool4 = tf.layers.max_pooling2d(inputs=conv4, pool_size=[3, 3], strides=2,padding='same')
+        output_cnn = tf.layers.max_pooling2d(inputs=conv4, pool_size=[3, 3], strides=2,padding='same')
         
-        #add batch norm
+        #Add batch Norm
+        if self.config.batch_norm:
+                output_cnn = tf.contrib.layers.batch_norm(output_cnn, center=True, scale=True, is_training=self.isTraining,scope='bn_4')
+        
 
-        output_cnn = tf.contrib.layers.batch_norm(pool4, center=True, scale=True, is_training=self.isTraining,scope='bn_2')
-
-        num_channels  = 32
-        filter_W = 54
-        filter_H = 8
+        filter_H =  8
+        filter_W =  54
+        num_channels = 32
 
         
         input_rnn = tf.reshape(output_cnn,shape=[-1,num_channels,filter_H*filter_W])
@@ -182,16 +199,21 @@ class COVRNNModel(LangDetectionModel):
         
         with tf.name_scope('lstm_layer'):
                 gru = tf.contrib.rnn.GRUCell(self.config.lstm_size)
-        with tf.name_scope('dropout'):
-                cell = tf.contrib.rnn.DropoutWrapper(gru, output_keep_prob=1-dropout_rate)
-                        
+        if self.config.rnn_dropout:
+                with tf.name_scope('dropout'):
+                        gru = tf.contrib.rnn.DropoutWrapper(gru, output_keep_prob=1-dropout_rate)
+        cell = gru                
         initial_state = cell.zero_state(tf.shape(input_rnn)[0] , tf.float32)
+
         output_rnn,_ = tf.nn.dynamic_rnn(cell,input_rnn,initial_state=initial_state)
         
         
         ##final batch normalization
+        #Add batch Norm
+        if self.config.batch_norm:
+                output_rnn = tf.contrib.layers.batch_norm(output_rnn, center=True, scale=True, is_training=self.isTraining,scope='bn_5')
         
-        outputs = tf.contrib.layers.batch_norm(output_rnn, center=True, scale=True, is_training=self.isTraining,scope='bn_3')
+        outputs = output_rnn
 
 
         ##Add fully connected layer
@@ -231,7 +253,15 @@ class COVRNNModel(LangDetectionModel):
         Returns:
             train_op: The Op for training.
         """
-        optimizer = tf.train.AdamOptimizer(Config.lr)
+        train_op = None
+        optimizer = tf.train.AdamOptimizer(self.config.lr)
+        #if self.config.batch_norm:
+        #        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        #        if update_ops:
+        #                with tf.control_dependencies(update_ops):
+        #                        train_op = optimizer.minimize(loss,global_step=tf.train.get_global_step())
+        #else:
+        #        train_op = optimizer.minimize(loss)
         train_op = optimizer.minimize(loss)
         return train_op
 
@@ -253,7 +283,7 @@ class COVRNNModel(LangDetectionModel):
         assert len(examples_raw) == len(preds)
 
         ret = []
-        print preds
+        #print preds
         for i, (image, label) in enumerate(examples_raw):
             labels_ = preds[i] # only select elements of mask.
             ret.append([image, int(label), labels_])
@@ -262,11 +292,14 @@ class COVRNNModel(LangDetectionModel):
     def predict_on_batch(self, sess, inputs_batch):
         feed = self.create_feed_dict(inputs_batch=inputs_batch,training=False)
         predictions = sess.run(tf.argmax(self.pred, axis=1), feed_dict=feed)
+        #cnn1,cnn2,cnn3,cnn4 = sess.run([self.shapeOfCNN1,self.shapeOfCNN2,self.shapeOfCNN3,self.shapeOfCNN4], feed_dict=feed)
+        #print (cnn1,cnn2,cnn3,cnn4)
         return predictions
 
     def train_on_batch(self, sess, inputs_batch, labels_batch):
+        extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)    
         feed = self.create_feed_dict(inputs_batch, labels_batch=labels_batch,dropout=self.config.dropout,training=True)
-        _, loss = sess.run([self.train_op, self.loss], feed_dict=feed)
+        _, loss,_ = sess.run([self.train_op, self.loss,extra_update_ops], feed_dict=feed)
         return loss
 
     def __init__(self, helper, config):
@@ -277,6 +310,11 @@ class COVRNNModel(LangDetectionModel):
         self.labels_placeholder = None
         self.dropout_placeholder = None
         self.isTraining = None
+        #self.shapeOfCNN1 = None
+        #self.shapeOfCNN2 = None
+        #self.shapeOfCNN3 = None
+        #self.shapeOfCNN4 = None
+        
 
         self.build()
 
