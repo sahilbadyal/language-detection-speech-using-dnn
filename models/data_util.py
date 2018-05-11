@@ -8,6 +8,7 @@ import logging
 import PIL.Image as Image
 import numpy as np
 from defs import LMAP
+import random
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -34,13 +35,19 @@ class ModelHelper(object):
         self.base_path = base_path
         self.n_classes = n_classes
 
-    def vectorize(self, examples):
-            im_data = np.zeros((len(examples), self.n_channels, self.x_features, self.y_features), dtype=np.float32)
+    def vectorize(self, examples,augm=False):
+            #print(len(examples))
+            im_data = np.zeros((len(examples), self.n_channels, self.y_features, self.x_features), dtype=np.float32)
             labels = []
             for i,example in enumerate(examples):
+                    #print example
                     im = self.read_png(example[0])
                     im_array = np.array(im).astype(np.float32)
-                    im_data[i, 0, :, :] = im_array[:self.x_features, :] / 256.0
+                    if augm:
+                            offset = random.randint(0, 90)
+                            im_data[i, 0, :, :] = im_array[:self.y_features, offset:offset+self.x_features] / 256.0
+                    else:
+                            im_data[i, 0, :, :] = im_array[:self.y_features, :] / 256.0
                     labels.append(LMAP[int(example[1])])
             return im_data,labels
 
@@ -54,7 +61,8 @@ class ModelHelper(object):
             #logger.info("Loading  data...%d ",len(examples))
             
             # now process all the input data.
-            inputs,labels = self.vectorize(examples)
+            augm = True
+            inputs,labels = self.vectorize(examples,augm)
             
             #logger.info("Done reading %d images", len(examples))
 
@@ -76,8 +84,8 @@ class Config:
         instantiation.
         """
         n_channels=1
-        x_features=128
-        y_features=858
+        x_features=858
+        y_features=128
         n_classes=3
         dropout=0.5
         batch_size=32
