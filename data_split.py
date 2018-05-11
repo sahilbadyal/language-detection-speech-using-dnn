@@ -1,5 +1,6 @@
 """split data into training and validation sets"""
 import csv
+from models.defs import LID
 
 with open('./data/trainingData.csv', 'r') as csvfile:
     next(csvfile) #skip headers
@@ -7,7 +8,8 @@ with open('./data/trainingData.csv', 'r') as csvfile:
 
     #Map every language to an ID
     langs = set([language.strip() for _,language in data])
-    ID = {lang: i for i,lang in enumerate(sorted(langs))}
+    print LID
+    ID = LID
 
     #Write first 306 items to training set and the rest to validation set
     cnt = [0 for _ in range(len(langs))]

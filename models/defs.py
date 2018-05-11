@@ -6,14 +6,12 @@ Common definitions for Lang Detection
 
 from util import one_hot
 
+n_classes = 3
 LBLS = [
-    "0",
-    "1",
-    "2",
+    "Belize Kriol English",
+    "Hindi",
+    "Other",
     ]
 NONE = "O"
-LMAP = {k: one_hot(3,i) for i, k in enumerate(LBLS)}
-NUM = "NNNUMMM"
-UNK = "UUUNKKK"
-
-EMBED_SIZE = 50
+LMAP = {i: one_hot(n_classes,i) for i, k in enumerate(LBLS)}
+LID = {k: i for i, k in enumerate(LBLS)}
