@@ -11,9 +11,9 @@ def stft(sig, frameSize, overlapFac=0.5, window=np.hanning):
     hopSize = int(frameSize - np.floor(overlapFac * frameSize))
     
     # zeros at beginning (thus center of 1st window should be for sample nr. 0)
-    samples = np.append(np.zeros(np.floor(frameSize/2.0)), sig)    
+    samples = np.append(np.zeros(np.floor(frameSize/2.0).astype(np.int64)), sig)    
     # cols for windowing
-    cols = np.ceil( (len(samples) - frameSize) / float(hopSize)) + 1
+    cols = np.ceil( (len(samples) - frameSize) / float(hopSize) + 1).astype(np.int64)
     # zeros at end (thus samples can be fully covered by frames)
     samples = np.append(samples, np.zeros(frameSize))
     
@@ -82,16 +82,16 @@ def plotstft(audiopath, binsize=2**10, plotpath=None, colormap="gray", channel=0
     image.save(name)
 
 
-file = open('trainingData.csv', 'r')
+file = open('./data/trainingData.csv', 'r')
 for iter, line in enumerate(file.readlines()[1:]): # first line of traininData.csv is header (only for trainingData.csv)
     filepath = line.split(',')[0]
     filename = filepath[:-4]
-    wavfile = 'tmp.wav'
-    os.system('mpg123 -w ' + wavfile + ' /home/brainstorm/caffe/Data/mnt/3/language/train/mp3/' + filepath)
+    wavfile = '/tmp/tmp.wav'
+    os.system('lame --decode /home/sbad/personal/Spoken-language-identification/data/train/mp3/' + filepath + ' ' + wavfile)
     for augmentIdx in range(0, 20):
         alpha = np.random.uniform(0.9, 1.1)
         offset = np.random.randint(90)
-        plotstft(wavfile, channel=0, name='/home/brainstorm/data/language/train/pngaugm/'+filename+'.'+str(augmentIdx)+'.png',
+        plotstft(wavfile, channel=0, name='/home/sbad/personal/Speech-Language-Identification/data/train/pngaugm/'+filename+'.'+str(augmentIdx)+'.png',
                  alpha=alpha, offset=offset)
 
     os.remove(wavfile)
