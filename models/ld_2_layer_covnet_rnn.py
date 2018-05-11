@@ -42,7 +42,7 @@ class Config:
     n_epochs = 40
     lr = 0.001
     batch_norm = True
-    lstm_size = 200
+    lstm_size = 100
     png_folder = ''
 
     def __init__(self, args):
@@ -55,7 +55,7 @@ class Config:
             #self.model_output = self.output_path + "model.weights"
             #self.eval_output = self.output_path + "results.txt"
             self.log_output = self.output_path + "log"
-            self.batch_norm = True
+            self.batch_norm = args['batch_norm']
             self.lstm_size = args['rnn_num_units']
             self.png_folder = args['png_folder']
 
@@ -147,57 +147,32 @@ class COVRNNModel(LangDetectionModel):
         self.shapeOfCNN1 = tf.shape(output_cnn_1)
 
 
-        conv2 = tf.layers.conv2d(
-                      inputs=output_cnn_1,
-                      filters=32,
-                      kernel_size=[5, 5],
-                      padding="same",
-                      activation=tf.nn.relu)
-        output_cnn_2 = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=2,padding='same')
+        #conv2 = tf.layers.conv2d(
+        #              inputs=output_cnn_1,
+        #              filters=32,
+        #              kernel_size=[5, 5],
+        #              padding="same",
+        #              activation=tf.nn.relu)
+        #output_cnn = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=2,padding='same')
         
-        self.shapeOfCNN2 = tf.shape(output_cnn_2)
-        
-        #Add batch Norm
-        if self.config.batch_norm:
-                output_cnn_2 = tf.contrib.layers.batch_norm(output_cnn_2, center=True, scale=True, is_training=self.isTraining,scope='bn_2')
-        
-        conv3 = tf.layers.conv2d(
-                      inputs=output_cnn_2,
-                      filters=32,
-                      kernel_size=[3, 3],
-                      padding="same",
-                      activation=tf.nn.relu)
-        output_cnn_3 = tf.layers.max_pooling2d(inputs=conv3, pool_size=[3, 3], strides=2,padding='same')
+        #self.shapeOfCNN2 = tf.shape(output_cnn)
         
         #Add batch Norm
-        if self.config.batch_norm:
-                output_cnn_3 = tf.contrib.layers.batch_norm(output_cnn_3, center=True, scale=True, is_training=self.isTraining,scope='bn_3')
+        #if self.config.batch_norm:
+        #        output_cnn = tf.contrib.layers.batch_norm(output_cnn, center=True, scale=True, is_training=self.isTraining,scope='bn_2')
         
-        self.shapeOfCNN3 = tf.shape(output_cnn_3)
-        
-        conv4 = tf.layers.conv2d(
-                      inputs=output_cnn_3,
-                      filters=32,
-                      kernel_size=[3, 3],
-                      padding="same",
-                      activation=tf.nn.relu)
-        output_cnn = tf.layers.max_pooling2d(inputs=conv4, pool_size=[3, 3], strides=2,padding='same')
-        
-        #Add batch Norm
-        if self.config.batch_norm:
-                output_cnn = tf.contrib.layers.batch_norm(output_cnn, center=True, scale=True, is_training=self.isTraining,scope='bn_4')
-        
+        output_cnn = output_cnn_1
 
-        filter_H =  8
-        filter_W =  54
-        num_channels = 32
+        filter_H =  64
+        filter_W =  429
+        num_channels = 16
 
         
         input_rnn = tf.reshape(output_cnn,shape=[-1,num_channels,filter_H*filter_W])
 
         ##Add rnn here
         
-        with tf.name_scope('lstm_layer'):
+        with tf.name_scope('gru_layer'):
                 gru = tf.contrib.rnn.GRUCell(self.config.lstm_size)
         if self.config.rnn_dropout:
                 with tf.name_scope('dropout'):
@@ -207,13 +182,7 @@ class COVRNNModel(LangDetectionModel):
 
         output_rnn,_ = tf.nn.dynamic_rnn(cell,input_rnn,initial_state=initial_state)
         
-        
-        ##final batch normalization
-        #Add batch Norm
-        #if self.config.batch_norm:
-        #        output_rnn = tf.contrib.layers.batch_norm(output_rnn, center=True, scale=True, is_training=self.isTraining,scope='bn_5')
-        
-        outputs = output_rnn
+        outputs = input_rnn
 
 
         ##Add fully connected layer
@@ -262,7 +231,6 @@ class COVRNNModel(LangDetectionModel):
                                 train_op = optimizer.minimize(loss,global_step=tf.train.get_global_step())
         else:
                 train_op = optimizer.minimize(loss)
-        #train_op = optimizer.minimize(loss)
         return train_op
 
     def preprocess_speech_data(self, examples):
@@ -310,7 +278,7 @@ class COVRNNModel(LangDetectionModel):
         self.labels_placeholder = None
         self.dropout_placeholder = None
         self.isTraining = None
-        #self.shapeOfCNN1 = None
+        self.shapeOfCNN1 = None
         #self.shapeOfCNN2 = None
         #self.shapeOfCNN3 = None
         #self.shapeOfCNN4 = None
@@ -372,7 +340,7 @@ def do_train(args):
                 #        print_sentence(f, sentence, labels, predictions)
 
 def name():
-        return "COVRNNModel"
+        return "2LCOVRNNModel"
 
 def do_evaluate(args):
     config = Config(args)
