@@ -1,0 +1,67 @@
+name: lang_detection
+channels:
+- conda-forge
+- defaults
+dependencies:
+- absl-py=0.1.10=py_0
+- enum34=1.1.6=py27_1
+- futures=3.2.0=py27_0
+- backports=1.0=py27_0
+- backports.weakref=1.0rc1=py27_0
+- bleach=1.5.0=py27_0
+- certifi=2016.2.28=py27_0
+- freetype=2.5.5=2
+- funcsigs=1.0.2=py27_0
+- h5py=2.7.0=np113py27_0
+- hdf5=1.8.17=2
+- html5lib=0.9999999=py27_0
+- jpeg=8d=2
+- lcms=1.19=0
+- libffi=3.2.1=1
+- libgfortran=3.0.0=1
+- libgpuarray=0.6.9=0
+- libpng=1.6.30=1
+- libprotobuf=3.4.0=0
+- mako=1.0.6=py27_0
+- markdown=2.6.9=py27_0
+- markupsafe=1.0=py27_0
+- mkl=2017.0.3=0
+- mkl-service=1.1.2=py27_3
+- mock=2.0.0=py27_0
+- nose=1.3.7=py27_1
+- numpy=1.13.1=py27_0
+- openssl=1.0.2l=0
+- pbr=1.10.0=py27_0
+- pcre=8.39=1
+- pil=1.1.7=py27_2
+- pip=9.0.1=py27_1
+- protobuf=3.4.0=py27_0
+- pygpu=0.6.9=py27_0
+- python=2.7.13=0
+- pyyaml=3.12=py27_0
+- readline=6.2=2
+- scipy=0.19.1=np113py27_0
+- setuptools=36.4.0=py27_1
+- six=1.10.0=py27_0
+- sqlite=3.13.0=0
+- tensorflow=1.3.0=0
+- tensorflow-base=1.3.0=py27h0dbb4d0_1
+- tensorflow-tensorboard=0.1.5=py27_0
+- theano=0.9.0=py27_0
+- tk=8.5.18=0
+- werkzeug=0.12.2=py27_0
+- wheel=0.29.0=py27_0
+- yaml=0.1.6=0
+- zlib=1.2.11=0
+- pip:
+  - backports.functools-lru-cache==1.5
+  - cycler==0.10.0
+  - matplotlib==2.1.2
+  - pyparsing==2.2.0
+  - python-dateutil==2.6.1
+  - pytz==2018.3
+  - scikit-learn==0.19.1
+  - sklearn==0.0
+  - subprocess32==3.2.7
+prefix: ~/anaconda3/envs/lang_detection
+
