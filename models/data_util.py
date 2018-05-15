@@ -61,7 +61,7 @@ class ModelHelper(object):
             #logger.info("Loading  data...%d ",len(examples))
             
             # now process all the input data.
-            augm = True
+            augm = False
             inputs,labels = self.vectorize(examples,augm)
             
             #logger.info("Done reading %d images", len(examples))

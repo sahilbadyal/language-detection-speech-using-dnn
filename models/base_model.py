@@ -1,4 +1,5 @@
 import cPickle as pickle
+import tensorflow as tf
 
 class Model(object):
     """Abstracts a Tensorflow graph for a learning task.
@@ -119,3 +120,7 @@ class Model(object):
 
     def load_state(self,fileName):
             raise NotImplementedError("Each Model must re-implement this method.")
+    def setSummaryWriters(self,sess):
+            self.train_writer = tf.summary.FileWriter('./train',sess.graph)
+            self.val_writer = tf.summary.FileWriter('./val')
+            self.summary  = tf.summary.merge_all()

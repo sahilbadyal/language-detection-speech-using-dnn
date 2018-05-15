@@ -10,6 +10,7 @@ from models.base_model import Model
 from models.util import ConfusionMatrix, Progbar, minibatches
 #from models.data_util import get_chunks
 from models.defs import LBLS
+import numpy as np
 
 logger = logging.getLogger("langDec.model")
 logger.setLevel(logging.DEBUG)
@@ -54,7 +55,7 @@ class LangDetectionModel(Model):
 
         #need to correct
         for _, actual, pred  in self.output(sess, examples_raw):
-            print(actual,pred)
+            #print(actual,pred)
             class_cm.update(actual, pred)
             #total_images.
             #actual = set(get_chunks(labels))
@@ -77,18 +78,22 @@ class LangDetectionModel(Model):
         """
         inputs = []
         preds = []
+        val_loss = []
         prog = Progbar(target=1 + int(len(inputs_raw) / self.config.batch_size))
         for i, batch in enumerate(minibatches(inputs_raw, self.config.batch_size, shuffle=False)):
             inputs_,labels = self.preprocess_speech_data(batch)
-            preds_ = self.predict_on_batch(sess, inputs_)
+            preds_,_loss,_summary = self.predict_on_batch(sess, inputs_,labels)
             preds += list(preds_)
             inputs += list(inputs_)
             prog.update(i + 1, [])
+            self.val_writer.add_summary(_summary,i)
+            val_loss.append(_loss)
+        logger.info("Mean Val loss  = %.2f ",np.mean(val_loss))
         return self.consolidate_predictions(inputs_raw, inputs, preds)
 
     def fit(self, sess, saver, train_examples_raw, dev_set_raw):
         best_score = 0.
-
+        step = 0
 
         for epoch in range(self.config.n_epochs):
             logger.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
@@ -101,11 +106,16 @@ class LangDetectionModel(Model):
 			# Read the doc for utils.get_minibatches to find out how to use it.
                         # Note that get_minibatches could either return a list, or a list of list
                         # [features, labels]. This makes expanding tuples into arguments (* operator) handy
-            
+            epoch_loss = []
             for i,batch in enumerate(minibatches(train_examples_raw,self.config.batch_size)):
                     inputs,labels = self.preprocess_speech_data(batch)
-                    loss = self.train_on_batch(sess,inputs,labels)
+                    loss,_summary = self.train_on_batch(sess,inputs,labels)
                     prog.update(i+1,[("loss",loss)])
+                    self.train_writer.add_summary(_summary,step)
+                    epoch_loss.append(loss)
+                    step += 1
+
+            logger.info("Epoc loss after epoch %d = %.2f",epoch,np.mean(epoch_loss))
 
             logger.info("Evaluating on development data")
             language_cm = self.evaluate(sess, dev_set_raw)

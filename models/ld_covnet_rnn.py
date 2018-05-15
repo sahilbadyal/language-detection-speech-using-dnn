@@ -34,11 +34,11 @@ class Config:
     """
     rnn_dropout = True
     n_channels = 1
-    x_features = 128
-    y_features = 858
+    y_features = 128
+    x_features = 858
     n_classes = 3
     dropout = 0.2
-    batch_size = 32
+    batch_size = 64
     n_epochs = 40
     lr = 0.001
     batch_norm = True
@@ -86,7 +86,7 @@ class COVRNNModel(LangDetectionModel):
 
         (Don't change the variable names)
         """
-        self.input_placeholder = tf.placeholder(shape=[None,self.config.n_channels,self.config.x_features,self.config.y_features],dtype=tf.float32)
+        self.input_placeholder = tf.placeholder(shape=[None,self.config.n_channels,self.config.y_features,self.config.x_features],dtype=tf.float32)
         self.labels_placeholder = tf.placeholder(shape=[None,self.config.n_classes],dtype=tf.int32)
         self.dropout_placeholder = tf.placeholder(shape=(),dtype=tf.float32)
         self.isTraining = tf.placeholder(shape=(),dtype=tf.bool)
@@ -128,7 +128,9 @@ class COVRNNModel(LangDetectionModel):
         dropout_rate = self.dropout_placeholder
 
 
-        input_layer = tf.reshape(input_layer,shape=[-1,self.config.x_features,self.config.y_features,self.config.n_channels])
+        input_layer = tf.reshape(input_layer,shape=[-1,self.config.y_features,self.config.x_features,self.config.n_channels])
+
+        tf.summary.image('input',input_layer)
 
 
         conv1 = tf.layers.conv2d(
@@ -191,21 +193,23 @@ class COVRNNModel(LangDetectionModel):
         filter_H =  8
         filter_W =  54
         num_channels = 32
+        
+        tf.summary.histogram('output_cnn',output_cnn)
 
         
-        input_rnn = tf.reshape(output_cnn,shape=[-1,num_channels,filter_H*filter_W])
+        output_cnn = tf.reshape(output_cnn,shape=[-1,num_channels,filter_H*filter_W])
 
         ##Add rnn here
         
-        with tf.name_scope('lstm_layer'):
-                gru = tf.contrib.rnn.GRUCell(self.config.lstm_size)
+        with tf.name_scope('gru_layer'):
+                gru = tf.contrib.rnn.GRUCell(self.config.lstm_size,reuse=tf.get_variable_scope().reuse)
         if self.config.rnn_dropout:
                 with tf.name_scope('dropout'):
                         gru = tf.contrib.rnn.DropoutWrapper(gru, output_keep_prob=1-dropout_rate)
         cell = gru                
-        initial_state = cell.zero_state(tf.shape(input_rnn)[0] , tf.float32)
+        initial_state = cell.zero_state(tf.shape(output_cnn)[0] , tf.float32)
 
-        output_rnn,_ = tf.nn.dynamic_rnn(cell,input_rnn,initial_state=initial_state)
+        output_rnn,_ = tf.nn.dynamic_rnn(cell,output_cnn,initial_state=initial_state)
         
         
         ##final batch normalization
@@ -213,12 +217,19 @@ class COVRNNModel(LangDetectionModel):
         #if self.config.batch_norm:
         #        output_rnn = tf.contrib.layers.batch_norm(output_rnn, center=True, scale=True, is_training=self.isTraining,scope='bn_5')
         
-        outputs = output_rnn
+        outputs = tf.reshape(output_rnn,shape=[-1,num_channels*self.config.lstm_size])
+        #outputs = output_rnn
+        self.finalShape = tf.shape(outputs)
+
+        tf.summary.histogram('outputs',outputs)
+
 
 
         ##Add fully connected layer
         with tf.name_scope('affine_layer'):
-                preds = tf.contrib.layers.fully_connected(outputs[:,-1],self.config.n_classes, activation_fn=None)
+                preds = tf.contrib.layers.fully_connected(outputs,self.config.n_classes, activation_fn=None)
+        
+        tf.summary.histogram('preds',preds)
 
         return preds
 
@@ -232,6 +243,7 @@ class COVRNNModel(LangDetectionModel):
             loss: A 0-d tensor (scalar)
         """
         loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.labels_placeholder,logits=preds))
+        tf.summary.scalar('loss',loss)
         return loss
 
     def add_training_op(self, loss):
@@ -289,18 +301,17 @@ class COVRNNModel(LangDetectionModel):
             ret.append([image, int(label), labels_])
         return ret
     
-    def predict_on_batch(self, sess, inputs_batch):
-        feed = self.create_feed_dict(inputs_batch=inputs_batch,training=False)
-        predictions = sess.run(tf.argmax(self.pred, axis=1), feed_dict=feed)
-        #cnn1,cnn2,cnn3,cnn4 = sess.run([self.shapeOfCNN1,self.shapeOfCNN2,self.shapeOfCNN3,self.shapeOfCNN4], feed_dict=feed)
-        #print (cnn1,cnn2,cnn3,cnn4)
-        return predictions
+    def predict_on_batch(self, sess, inputs_batch,labels_batch):
+        feed = self.create_feed_dict(inputs_batch=inputs_batch,labels_batch=labels_batch,training=False)
+        predictions,loss,_summary = sess.run([tf.argmax(self.pred, axis=1),self.loss,self.summary], feed_dict=feed)
+        return predictions,loss,_summary
 
     def train_on_batch(self, sess, inputs_batch, labels_batch):
-        #extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)    
         feed = self.create_feed_dict(inputs_batch, labels_batch=labels_batch,dropout=self.config.dropout,training=True)
-        _, loss = sess.run([self.train_op, self.loss], feed_dict=feed)
-        return loss
+        #finalShape= sess.run([self.finalShape], feed_dict=feed)
+        #print finalShape
+        _, loss,_summary = sess.run([self.train_op, self.loss,self.summary], feed_dict=feed)
+        return loss,_summary
 
     def __init__(self, helper, config):
         super(COVRNNModel, self).__init__(helper, config)
@@ -313,7 +324,7 @@ class COVRNNModel(LangDetectionModel):
         #self.shapeOfCNN1 = None
         #self.shapeOfCNN2 = None
         #self.shapeOfCNN3 = None
-        #self.shapeOfCNN4 = None
+        #self.finalShape = None
         
 
         self.build()
@@ -354,11 +365,12 @@ def do_train(args):
 
         with tf.Session() as session:
             session.run(init)
+            model.setSummaryWriters(session)
             model.fit(session, saver, train, dev)
             #if report:
             #    report.log_output(model.output(session, dev))
             #    report.save()
-            #else:
+            #else
                 # Save predictions in a text file.
             #    output = model.output(session, dev)
             #    images, labels, predictions = zip(*output)

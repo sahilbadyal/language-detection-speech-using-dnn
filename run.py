@@ -19,7 +19,7 @@ parser.add_argument('--log_every', type=int, default=100, help='print informatio
 parser.add_argument('--save_every', type=int, default=50000, help='save state every x iteration')
 parser.add_argument('--dropout', type=float, default=0.0, help='dropout rate (between 0 and 1)')
 parser.add_argument('--no-batch_norm', dest="batch_norm", action='store_false', help='batch normalization')
-parser.add_argument('--rnn_num_units', type=int, default=200, help='number of hidden units if the network is RNN')
+parser.add_argument('--rnn_num_units', type=int, default=500, help='number of hidden units if the network is RNN')
 parser.add_argument('--png_folder', type=str, default="./data/train/pngaugm/", help='The folder where spectrograms are placed')
 parser.add_argument('--train_file', type=str, default="./data/trainEqualAugm.csv", help='The folder where spectrograms are placed')
 parser.add_argument('--val_file', type=str, default="./data/valEqualAugm.csv", help='The folder where spectrograms are placed')
