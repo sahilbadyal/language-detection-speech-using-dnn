@@ -176,6 +176,7 @@ class ConfusionMatrix(object):
 
         # micro average
         tp, fp, tn, fn = micro
+        print micro
         acc = (tp + tn)/(tp + tn + fp + fn) if tp > 0  else 0
         prec = (tp)/(tp + fp) if tp > 0  else 0
         rec = (tp)/(tp + fn) if tp > 0  else 0

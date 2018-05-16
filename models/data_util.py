@@ -84,7 +84,7 @@ class Config:
         instantiation.
         """
         n_channels=1
-        x_features=858
+        x_features=678
         y_features=128
         n_classes=3
         dropout=0.5
@@ -93,26 +93,30 @@ class Config:
         lr=0.001
         batch_size=32
         lstm_size=500
-        png_folder='../data/train/png/'
+        png_folder='../data/train/pngaugm/'
 
 def testModelHelper():
 
         config = Config()
 
         helper = getModelHelper(config)
+        
+        list_ = []
 
-        list1 = ['0aaatsgitup', '0aardcafriy', '0aaus1iol2h', '0aboxbqzx2n', '0abyp4czxgr', '0acbkn5sl3x', '0acwgcalkob', '0acwmldxgzf']
+        with open('../data/valEqualAugm.csv') as valFile:
+                lines = valFile.readlines()
+                for line in lines:
+                        split = line.split(',')
+                        list_.append((split[0],split[1]))
 
-        list2 = ['0','1','2','1','0','1','2','0']
+        #list_ = [(l,m) for l,m in zip(list1,list2) ] 
 
-        list_ = [(l,m) for l,m in zip(list1,list2) ] 
+        in_data,labels  = helper.load_and_preprocess_data(list_[2801:3000])
 
-        in_data,labels  = helper.load_and_preprocess_data(list_)
-
-        #y = {k:i for k,i in zip(list_,labels)}
-        #print y
+        y = {k:i for k,i in zip(list_,labels)}
+        print in_data[100],labels[100],list_[2900]
 
         assert np.shape(in_data)== (8,1,128,858),np.shape(labels)==(8,3,)
 if __name__ == "__main__":
-        testModelHelper#()
+        testModelHelper()
 

@@ -34,8 +34,8 @@ class Config:
     """
     rnn_dropout = True
     n_channels = 1
-    x_features = 128
-    y_features = 858
+    y_features = 128
+    x_features = 858
     n_classes = 3
     dropout = 0.2
     batch_size = 32
@@ -86,7 +86,7 @@ class COVRNNModel(LangDetectionModel):
 
         (Don't change the variable names)
         """
-        self.input_placeholder = tf.placeholder(shape=[None,self.config.n_channels,self.config.x_features,self.config.y_features],dtype=tf.float32)
+        self.input_placeholder = tf.placeholder(shape=[None,self.config.n_channels,self.config.y_features,self.config.x_features],dtype=tf.float32)
         self.labels_placeholder = tf.placeholder(shape=[None,self.config.n_classes],dtype=tf.int32)
         self.dropout_placeholder = tf.placeholder(shape=(),dtype=tf.float32)
         self.isTraining = tf.placeholder(shape=(),dtype=tf.bool)
@@ -128,17 +128,17 @@ class COVRNNModel(LangDetectionModel):
         dropout_rate = self.dropout_placeholder
 
 
-        input_layer = tf.reshape(input_layer,shape=[-1,self.config.x_features,self.config.y_features,self.config.n_channels])
+        input_layer = tf.reshape(input_layer,shape=[-1,self.config.y_features,self.config.x_features,self.config.n_channels])
 
 
         conv1 = tf.layers.conv2d(
                       inputs=input_layer,
                       filters=16,
-                      kernel_size=[7, 7],
+                      kernel_size=[5, 5],
                       padding="same",
                       activation=tf.nn.relu)
 
-        output_cnn_1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[3, 3], strides=2,padding='same')
+        output_cnn_1 = tf.layers.max_pooling2d(inputs=conv1, pool_size=[7, 7], strides=5,padding='same')
         
         #Add batch Norm
         if self.config.batch_norm:
@@ -147,47 +147,49 @@ class COVRNNModel(LangDetectionModel):
         self.shapeOfCNN1 = tf.shape(output_cnn_1)
 
 
-        #conv2 = tf.layers.conv2d(
-        #              inputs=output_cnn_1,
-        #              filters=32,
-        #              kernel_size=[5, 5],
-        #              padding="same",
-        #              activation=tf.nn.relu)
-        #output_cnn = tf.layers.max_pooling2d(inputs=conv2, pool_size=[3, 3], strides=2,padding='same')
+        conv2 = tf.layers.conv2d(
+                      inputs=output_cnn_1,
+                      filters=32,
+                      kernel_size=[3, 3],
+                      padding="same",
+                      activation=tf.nn.relu)
+        output_cnn = tf.layers.max_pooling2d(inputs=conv2, pool_size=[5, 5], strides=2,padding='same')
         
-        #self.shapeOfCNN2 = tf.shape(output_cnn)
+        self.shapeOfCNN2 = tf.shape(output_cnn)
         
         #Add batch Norm
-        #if self.config.batch_norm:
-        #        output_cnn = tf.contrib.layers.batch_norm(output_cnn, center=True, scale=True, is_training=self.isTraining,scope='bn_2')
+        if self.config.batch_norm:
+                output_cnn = tf.contrib.layers.batch_norm(output_cnn, center=True, scale=True, is_training=self.isTraining,scope='bn_2')
         
-        output_cnn = output_cnn_1
+        #output_cnn = output_cnn_1
 
-        filter_H =  64
-        filter_W =  429
-        num_channels = 16
+        filter_H =  13
+        filter_W =  86
+        num_channels = 32
 
         
         input_rnn = tf.reshape(output_cnn,shape=[-1,num_channels,filter_H*filter_W])
+        output_rnn = None
+
 
         ##Add rnn here
-        
         with tf.name_scope('gru_layer'):
-                gru = tf.contrib.rnn.GRUCell(self.config.lstm_size)
-        if self.config.rnn_dropout:
-                with tf.name_scope('dropout'):
-                        gru = tf.contrib.rnn.DropoutWrapper(gru, output_keep_prob=1-dropout_rate)
-        cell = gru                
-        initial_state = cell.zero_state(tf.shape(input_rnn)[0] , tf.float32)
+                gru = tf.contrib.rnn.GRUCell(num_units=self.config.lstm_size)
+                if self.config.rnn_dropout:
+                        with tf.name_scope('dropout'):
+                                gru = tf.contrib.rnn.DropoutWrapper(gru, output_keep_prob=1-dropout_rate)
+                cell = gru                
+                initial_state = cell.zero_state(tf.shape(input_rnn)[0] , tf.float32)
+                output_rnn,_ = tf.nn.dynamic_rnn(cell,input_rnn,initial_state=initial_state)
 
-        output_rnn,_ = tf.nn.dynamic_rnn(cell,input_rnn,initial_state=initial_state)
-        
-        outputs = input_rnn
+        outputs = tf.reshape(output_rnn,shape=[-1,self.config.lstm_size*num_channels])
+
 
 
         ##Add fully connected layer
         with tf.name_scope('affine_layer'):
-                preds = tf.contrib.layers.fully_connected(outputs[:,-1],self.config.n_classes, activation_fn=None)
+                preds = tf.contrib.layers.fully_connected(outputs,self.config.n_classes, activation_fn=None)
+        tf.summary.histogram('preds',preds)
 
         return preds
 
@@ -201,6 +203,7 @@ class COVRNNModel(LangDetectionModel):
             loss: A 0-d tensor (scalar)
         """
         loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.labels_placeholder,logits=preds))
+        tf.summary.scalar('loss',loss)
         return loss
 
     def add_training_op(self, loss):
@@ -257,18 +260,16 @@ class COVRNNModel(LangDetectionModel):
             ret.append([image, int(label), labels_])
         return ret
     
-    def predict_on_batch(self, sess, inputs_batch):
-        feed = self.create_feed_dict(inputs_batch=inputs_batch,training=False)
-        predictions = sess.run(tf.argmax(self.pred, axis=1), feed_dict=feed)
-        #cnn1,cnn2,cnn3,cnn4 = sess.run([self.shapeOfCNN1,self.shapeOfCNN2,self.shapeOfCNN3,self.shapeOfCNN4], feed_dict=feed)
-        #print (cnn1,cnn2,cnn3,cnn4)
-        return predictions
+    def predict_on_batch(self, sess, inputs_batch,labels_batch):
+        feed = self.create_feed_dict(inputs_batch=inputs_batch,labels_batch=labels_batch,training=False)
+        predictions,loss,_summary = sess.run([tf.argmax(self.pred, axis=1),self.loss,self.summary], feed_dict=feed)
+        return predictions,loss,_summary
 
     def train_on_batch(self, sess, inputs_batch, labels_batch):
         #extra_update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)    
         feed = self.create_feed_dict(inputs_batch, labels_batch=labels_batch,dropout=self.config.dropout,training=True)
-        _, loss = sess.run([self.train_op, self.loss], feed_dict=feed)
-        return loss
+        _, loss,_summary = sess.run([self.train_op, self.loss,self.summary], feed_dict=feed)
+        return loss,_summary
 
     def __init__(self, helper, config):
         super(COVRNNModel, self).__init__(helper, config)
@@ -279,7 +280,7 @@ class COVRNNModel(LangDetectionModel):
         self.dropout_placeholder = None
         self.isTraining = None
         self.shapeOfCNN1 = None
-        #self.shapeOfCNN2 = None
+        self.shapeOfCNN2 = None
         #self.shapeOfCNN3 = None
         #self.shapeOfCNN4 = None
         
@@ -322,6 +323,7 @@ def do_train(args):
 
         with tf.Session() as session:
             session.run(init)
+            model.setSummaryWriters(session)
             model.fit(session, saver, train, dev)
             #if report:
             #    report.log_output(model.output(session, dev))

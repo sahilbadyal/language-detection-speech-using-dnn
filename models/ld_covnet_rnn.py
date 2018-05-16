@@ -38,7 +38,7 @@ class Config:
     x_features = 858
     n_classes = 3
     dropout = 0.2
-    batch_size = 64
+    batch_size = 32
     n_epochs = 40
     lr = 0.001
     batch_norm = True
@@ -55,7 +55,7 @@ class Config:
             #self.model_output = self.output_path + "model.weights"
             #self.eval_output = self.output_path + "results.txt"
             self.log_output = self.output_path + "log"
-            self.batch_norm = True
+            self.batch_norm = False
             self.lstm_size = args['rnn_num_units']
             self.png_folder = args['png_folder']
 
@@ -202,7 +202,7 @@ class COVRNNModel(LangDetectionModel):
         ##Add rnn here
         
         with tf.name_scope('gru_layer'):
-                gru = tf.contrib.rnn.GRUCell(self.config.lstm_size,reuse=tf.get_variable_scope().reuse)
+                gru = tf.contrib.rnn.GRUCell(self.config.lstm_size,reuse=True)
         if self.config.rnn_dropout:
                 with tf.name_scope('dropout'):
                         gru = tf.contrib.rnn.DropoutWrapper(gru, output_keep_prob=1-dropout_rate)
